@@ -2,12 +2,22 @@
 -- Supabase 대시보드 > SQL Editor 에 통째로 붙여넣고 Run 하세요. 여러 번 실행해도 괜찮아요.
 
 create table if not exists public.user_state (
-  user_id    uuid primary key references auth.users (id) on delete cascade,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  app        text not null default 'mystic',
   data       jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now(),
-  -- 한 사람당 저장값은 수 KB라 256KB를 넘으면 거절해요(남용 방지)
-  constraint user_state_size check (pg_column_size(data) <= 262144)
+  updated_at timestamptz not null default now()
 );
+
+-- 계산기마다 한 행씩: 비결 계산기(mystic), 딜 계산기(calc)
+-- 예전 버전(사람당 한 행)으로 만든 표도 아래 줄들이 그대로 고쳐요. 저장된 값은 지워지지 않아요.
+alter table public.user_state add column if not exists app text not null default 'mystic';
+alter table public.user_state drop constraint if exists user_state_app_check;
+alter table public.user_state add constraint user_state_app_check check (app in ('mystic', 'calc'));
+alter table public.user_state drop constraint if exists user_state_pkey;
+alter table public.user_state add constraint user_state_pkey primary key (user_id, app);
+-- 딜 계산기는 장비·빌드가 많아 1MB까지 받아요. 넘으면 거절해요(남용 방지)
+alter table public.user_state drop constraint if exists user_state_size;
+alter table public.user_state add constraint user_state_size check (pg_column_size(data) <= 1048576);
 
 -- 행 단위 보안(RLS): 켜 두면 아래 정책에 맞는 행만 읽고 쓸 수 있어요
 alter table public.user_state enable row level security;
